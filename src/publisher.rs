@@ -1,6 +1,7 @@
-use futures::Future;
+use crossbeam_channel::Receiver;
+use futures::compat::Future01CompatExt;
 use hubcaps::comments::CommentOptions;
-use hubcaps::Github;
+use hubcaps::{Error, Github};
 use log::*;
 use url::Url;
 
@@ -17,9 +18,20 @@ impl Publisher {
         Publisher { github, public_url }
     }
 
-    pub fn handle_report(&self, report: Report) -> Box<dyn Future<Item = (), Error = ()>> {
+    pub async fn run(self, report_receiver: Receiver<Report>) {
+        for report in report_receiver {
+            if let Err(e) = self.handle_report(report).await {
+                error!("Failed to publish result: {:?}", e)
+            }
+        }
+    }
+
+    pub async fn handle_report(&self, report: Report) -> Result<(), Error> {
         match report.content {
-            ReportContent::Pong { issue_id } => Box::new(
+            ReportContent::Pong { issue_id } => {
+                // FIXME: This is broken currently; probably some issue with tokio 0.1/0.2 compat
+                //        which the compat wrapper doesn't cover; we'll just wait for hubcaps to
+                //        upgrade
                 self.github
                     .repo(report.repository.user, report.repository.name)
                     .issues()
@@ -28,27 +40,28 @@ impl Publisher {
                     .create(&CommentOptions {
                         body: "pong".to_string(),
                     })
-                    .map_err(|e| error!("Failed to post comment: {:?}", e))
-                    .map(|_| {}),
-            ),
+                    .compat()
+                    .await
+                    .map(|_| ())?;
+                Ok(())
+            }
             ReportContent::TestResult {
                 result,
                 test_target,
             } => match test_target {
                 TestTarget::PullRequest(id) => {
                     info!("Posting result in {}#{}", report.repository, id);
-                    Box::new(
-                        self.github
-                            .repo(report.repository.user, report.repository.name)
-                            .issues()
-                            .get(id)
-                            .comments()
-                            .create(&CommentOptions {
-                                body: self.format_pull_request_comment(result),
-                            })
-                            .map_err(|e| error!("Failed to post comment: {:?}", e))
-                            .map(|_| {}),
-                    )
+                    self.github
+                        .repo(report.repository.user, report.repository.name)
+                        .issues()
+                        .get(id)
+                        .comments()
+                        .create(&CommentOptions {
+                            body: self.format_pull_request_comment(result),
+                        })
+                        .compat()
+                        .await
+                        .map(|_| ())
                 }
                 TestTarget::Branch(branch) => {
                     info!(
@@ -60,7 +73,7 @@ impl Publisher {
                     if let Err(e) = result {
                         error!("Error: {}", e);
                     }
-                    Box::new(futures::future::ok(()))
+                    Ok(())
                 }
             },
         }

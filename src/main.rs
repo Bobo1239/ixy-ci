@@ -13,7 +13,6 @@ use actix_files::Files;
 use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpServer};
 use clap::{crate_version, Arg};
-use futures::Stream;
 use hubcaps::{Credentials, Github};
 
 use crate::config::Config;
@@ -81,13 +80,20 @@ fn main() -> io::Result<()> {
     //     })
     //     .unwrap();
 
+    job_sender
+        .send(worker::Job::Ping {
+            repository: config::Repository {
+                user: "bobo1239".to_string(),
+                name: "ixy.rs".to_string(),
+            },
+            issue_id: 3,
+        })
+        .unwrap();
+
     let sys = actix_rt::System::new("runtime");
 
     let publisher = Publisher::new(github.clone(), config.public_url);
-    actix_rt::spawn(
-        futures::stream::iter_ok(report_receiver)
-            .for_each(move |report| publisher.handle_report(report)),
-    );
+    actix_rt::spawn(publisher.run(report_receiver));
 
     let (github_config, log_directory) = (config.github, config.log_directory);
     HttpServer::new(move || {
@@ -100,7 +106,7 @@ fn main() -> io::Result<()> {
             .service(web::scope("/github/").service(github::webhook_service))
     })
     .bind(config.bind_address)?
-    .start();
+    .run();
 
     sys.run()
 }
