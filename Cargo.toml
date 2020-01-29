@@ -25,20 +25,20 @@ actix-rt = "1.0.0"
 futures = { version = "0.3.1", features = ["compat"] }
 
 # GitHub
-hubcaps = { git = "https://github.com/softprops/hubcaps.git" }
-# TODO: Update to 0.16 once jsonwebtoken v7 is released:
-# https://github.com/Keats/jsonwebtoken/pull/91
-ring = "0.14.6"
+hubcaps = { git = "https://github.com/grahamc/hubcaps.git", branch = "async" }
+ring = "0.16.9"
 
 # OpenStack
+# TODO: https://github.com/dtantsur/rust-osauth/pull/10 may remove the need to manually query the
+#       project domain?
 openstack = "0.3.0"
 fallible-iterator = "0.2.0"
 waiter = "0.1.1"
 
 # Worker
-ssh2 = "0.6.0"
+ssh2 = "0.7.1"
 # TODO: Upgrade to get rid of futures 0.1 (also requires hubcaps to upgrade)
-reqwest = "0.9.20"
+reqwest = "0.10.1"
 
 # pcap
 pcap-file = "1.1.1"
